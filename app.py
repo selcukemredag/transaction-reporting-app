@@ -174,4 +174,4 @@ def get_client(transaction_id):
 
 # Run the Flask application when this script is executed directly
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run()

@@ -1,6 +1,7 @@
 from threading import Lock
 import time
 import requests
+import os
 
 # Global variables for token management
 TOKEN = None
@@ -23,8 +24,8 @@ def get_jwt_token():
         url = "https://sandbox-reporting.rpdpymnt.com/api/v3/merchant/user/login"
         # Credentials for authentication
         credentials = {
-            "email": "demo@financialhouse.io",
-            "password": "cjaiU8CV"
+            "email": os.environ.get("MERCHANT_EMAIL"),
+            "password": os.environ.get("MERCHANT_PASSWORD")
         }
 
         try:
