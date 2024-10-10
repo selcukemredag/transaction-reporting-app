@@ -2,6 +2,9 @@ from threading import Lock
 import time
 import requests
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Global variables for token management
 TOKEN = None
