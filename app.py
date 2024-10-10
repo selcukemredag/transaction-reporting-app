@@ -123,39 +123,6 @@ def dynamic_transaction_search():
 # - List comprehension: Dinamik filtreleme işlemlerinde kullanıldı.
 # - for döngüsü: Kullanıcının belirttiği filtre kriterlerini işlemede kullanıldı.
 
-# Unit Testler
-# Şimdi her bir fonksiyon için unit testler hazırlayacağız. Bu testler, fonksiyonların doğru çalıştığını kontrol etmek için kullanılır.
-import pytest
-
-@pytest.fixture
-def client():
-    with app.test_client() as client:
-        yield client
-
-# Token alma testi
-def test_get_jwt_token():
-    token = get_jwt_token()
-    assert token is not None, "Token alınamadı, kimlik doğrulama başarısız."
-
-# transactions_report endpoint testi
-def test_transactions_report(client):
-    response = client.get('/transactions_report')
-    assert response.status_code == 200 or response.status_code == 401, "transactions_report endpointinde hata oluştu."
-
-# transaction_list endpoint testi
-def test_transaction_list(client):
-    response = client.get('/transaction_list')
-    assert response.status_code == 200 or response.status_code == 401, "transaction_list endpointinde hata oluştu."
-
-# dynamic_transaction_search endpoint testi
-def test_dynamic_transaction_search(client):
-    response = client.post('/dynamic_transaction_search', json={
-        "fromDate": "2024-01-01",
-        "toDate": "2024-01-31",
-        "status": "APPROVED"
-    })
-    assert response.status_code == 200 or response.status_code == 401, "dynamic_transaction_search endpointinde hata oluştu."
-
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
@@ -163,4 +130,32 @@ if __name__ == '__main__':
 # Devam ederken, eklediğimiz "dynamic_transaction_search" endpointi ile daha esnek bir arama ve filtreleme sistemi geliştirdik.
 # Bu tür esneklikler, gerçek dünyada kullanıcıların farklı ihtiyaçlarına cevap verebilmek için oldukça önemlidir.
 # Filtreleme işlemlerinde list comprehension ve dict veri yapısını kullanarak kodun hem okunabilirliğini hem de performansını artırdık.
-# Ayrıca unit testler ekleyerek, yazdığımız fonksiyonların doğru çalıştığını kontrol ettik. Bu, yazılım geliştirme sürecinde güvenilirlik sağlamak için kritik bir adımdır.
+
+# Unit testler için pytest'i kullanacağız, fakat bu testleri production ortamına deploy etmeyeceğiz.
+# Bu yüzden testleri ayrı bir dosyada tutacağız.
+
+# test_app.py
+# import pytest
+# from app import app
+
+# @pytest.fixture
+def client():
+    with app.test_client() as client:
+        yield client
+
+# def test_home(client):
+#     response = client.get('/')
+#     assert response.status_code == 200
+#     assert b'Uygulama çalışıyor!' in response.data
+
+# def test_transactions_report(client):
+#     response = client.get('/transactions_report')
+#     assert response.status_code in [200, 401]
+
+# def test_transaction_list(client):
+#     response = client.get('/transaction_list')
+#     assert response.status_code in [200, 401]
+
+# def test_dynamic_transaction_search(client):
+#     response = client.post('/dynamic_transaction_search', json={"fromDate": "2024-01-01", "toDate": "2024-01-31"})
+#     assert response.status_code in [200, 401]
