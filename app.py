@@ -84,7 +84,8 @@ def transaction_list():
 # - sorted() fonksiyonu: Listeyi belirli bir kritere göre sıralamak için kullanıldı.
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
 
 # Devam ederken, yeni eklediğimiz "transaction_list" endpointinde daha karmaşık veri yapıları kullanmaya başladık.
 # "List" veri yapısı, birden fazla transaction döndüğünde işimizi kolaylaştıracak. Bu kısımda ayrıca filtreleme ve sıralama işlemleri ekledik.
