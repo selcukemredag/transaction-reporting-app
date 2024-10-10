@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Transaction Application</title>
+    <script>
+        async function fetchTransactions() {
+            try {
+                const response = await fetch('/transactions/list');
+                const transactions = await response.json();
+                const container = document.getElementById('transactions');
+
+                transactions.forEach(txn => {
+                    const txnDiv = document.createElement('div');
+                    txnDiv.innerHTML = `<p>Transaction ID: ${txn.transaction.merchant.transactionId}</p>`;
+                    container.appendChild(txnDiv);
+                });
+            } catch (error) {
+                console.error('Error fetching transactions:', error);
+            }
+        }
+
+        window.onload = fetchTransactions;
+    </script>
+</head>
+<body>
+    <h1>Transactions List</h1>
+    <div id="transactions"></div>
+</body>
+</html>

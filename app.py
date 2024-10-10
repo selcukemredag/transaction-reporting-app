@@ -1,161 +1,177 @@
-# İlk olarak, Flask'i ve gerekli kütüphaneleri projeye dahil edeceğiz.
-from flask import Flask, request, jsonify
-import requests
-import os
-from collections import defaultdict
+from flask import Flask, request, jsonify, render_template
+# Import custom API clients
+from api_clients.transaction_report_client import TransactionReportClient
+from api_clients.transaction_list_client import TransactionListClient
+from api_clients.get_transaction_client import GetTransactionClient
+from api_clients.get_client_info_client import GetClientInfoClient
+import json
 
-# Projemizi başlatıyoruz.
+# Initialize the Flask application
 app = Flask(__name__)
 
-# Root endpoint: Uygulama çalışıyor mesajı göstermek için
+# Define the home route
 @app.route('/')
 def home():
-    return jsonify({"message": "Uygulama çalışıyor!"})
+    # Render the index.html template
+    return render_template('index.html')
 
-# Burada bir yapı kuracağız, bu yapı login endpointini kullanarak JWT token alacak.
-# Bu token diğer API isteklerinde güvenlik amacıyla kullanılacak.
-# get_jwt_token() fonksiyonu, API'ye giriş yaparak bize token sağlar.
-# Bu token, diğer API isteklerinde kimlik doğrulama için kullanılır.
-
-def get_jwt_token():
-    url = "https://sandbox-reporting.rpdpymnt.com/api/v3/merchant/user/login"
-    credentials = {
-        "email": "demo@financialhouse.io",
-        "password": "cjaiU8CV"
-    }
-    response = requests.post(url, json=credentials)
-    if response.status_code == 200:
-        return response.json().get("token")
-    else:
-        return None
-
-# Şimdi API için token aldık ve kullanabiliriz.
-# İlk endpoint: Merchant login ve transaction report için basit bir endpoint yapıyoruz.
-# transactions_report() fonksiyonu, belirli bir tarih aralığındaki transaction raporlarını almak için kullanılır.
-# Burada, JWT token'ı alıp bu token ile transaction rapor endpointine istek gönderiyoruz.
-@app.route('/transactions_report', methods=['GET'])
+# Define the route for fetching transaction reports
+@app.route('/transactions/report', methods=['GET'])
 def transactions_report():
-    token = get_jwt_token()
-    if not token:
-        return jsonify({"error": "Giriş yapılamadı, token alınamadı"}), 401
+    try:
+        # Retrieve query parameters from the request URL
+        from_date = request.args.get('fromDate', '2023-01-01')
+        to_date = request.args.get('toDate', '2023-12-31')
+        merchant = request.args.get('merchant')  # Optional parameter
+        acquirer = request.args.get('acquirer')  # Optional parameter
 
-    # Transaction rapor endpointine istek gönderiyoruz.
-    headers = {
-        "Authorization": f"Bearer {token}"
-    }
-    data = {
-        "fromDate": "2024-01-01",
-        "toDate": "2024-01-31"
-    }
-    url = "https://sandbox-reporting.rpdpymnt.com/api/v3/transactions/report"
-    response = requests.post(url, headers=headers, json=data)
+        # Convert merchant and acquirer IDs to integers if provided
+        merchant = int(merchant) if merchant else None
+        acquirer = int(acquirer) if acquirer else None
 
-    if response.status_code == 200:
-        return jsonify(response.json())
-    else:
-        return jsonify({"error": "Rapor alınamadı"}), response.status_code
+        # Create an instance of the TransactionReportClient with the given parameters
+        client = TransactionReportClient(from_date, to_date, merchant, acquirer)
+        # Execute the API request
+        response = client.execute()
 
-# Daha ayrıntılı bir transaction listesi almak için yeni bir endpoint ekliyoruz.
-# transaction_list() fonksiyonu, belirli kriterlere göre transaction listesini almak için kullanılır.
-# Bu fonksiyon, gelen transaction verilerini filtreler ve tutarlarına göre sıralar.
-@app.route('/transaction_list', methods=['GET'])
-def transaction_list():
-    token = get_jwt_token()
-    if not token:
-        return jsonify({"error": "Giriş yapılamadı, token alınamadı"}), 401
+        # Check if the response status code is 200 (OK)
+        if response.status_code == 200:
+            # Parse the JSON response data
+            data = response.json()
+            # Return the data as a JSON response
+            return jsonify(data)
+        else:
+            # If the response is not successful, log and return an error message
+            error_message = f"Failed to fetch transaction report. Status Code: {response.status_code}, Response: {response.text}"
+            print(f"Error in transactions_report: {error_message}")
+            return jsonify({"error": error_message}), response.status_code
+    except Exception as e:
+        # Handle any exceptions that occur during the process
+        print(f"Exception in transactions_report: {e}")
+        return jsonify({"error": str(e)}), 500
 
-    # Transaction list endpointine istek gönderiyoruz.
-    headers = {
-        "Authorization": f"Bearer {token}"
-    }
-    data = {
-        "fromDate": "2024-01-01",
-        "toDate": "2024-01-31",
-        "status": "APPROVED",
-        "operation": "3D"
-    }
-    url = "https://sandbox-reporting.rpdpymnt.com/api/v3/transaction/list"
-    response = requests.post(url, headers=headers, json=data)
+# Define the route for fetching a list of transactions
+@app.route('/transactions/list', methods=['GET'])
+def transactions_list():
+    try:
+        # Retrieve query parameters from the request URL
+        params = {
+            "fromDate": request.args.get('fromDate'),
+            "toDate": request.args.get('toDate'),
+            "status": request.args.get('status'),
+            "operation": request.args.get('operation'),
+            "merchantId": request.args.get('merchantId'),
+            "acquirerId": request.args.get('acquirerId'),
+            "paymentMethod": request.args.get('paymentMethod'),
+            "errorCode": request.args.get('errorCode'),
+            "filterField": request.args.get('filterField'),
+            "filterValue": request.args.get('filterValue'),
+            "page": request.args.get('page')
+        }
+        # Remove any parameters that are None or empty strings
+        params = {k: v for k, v in params.items() if v}
 
-    if response.status_code == 200:
-        transaction_data = response.json().get("data", [])
-        # Burada transaction verilerini filtreleyip sıralıyoruz.
-        # Onaylanan işlemleri filtreliyoruz ve tutarı büyükten küçüğe sıralıyoruz.
-        filtered_transactions = [t for t in transaction_data if t.get("transaction", {}).get("status") == "APPROVED"]
-        sorted_transactions = sorted(filtered_transactions, key=lambda x: x.get("transaction", {}).get("amount", 0), reverse=True)
-        return jsonify(sorted_transactions)
-    else:
-        return jsonify({"error": "Transaction listesi alınamadı"}), response.status_code
+        # Ensure that at least one parameter is provided
+        if not params:
+            return jsonify({"error": "At least one parameter must be provided."}), 400
 
-# Daha dinamik filtreleme ve arama için ek bir endpoint ekliyoruz.
-# Bu endpoint, kullanıcıdan alınan parametreler doğrultusunda transaction'ları filtreleyecek.
-@app.route('/dynamic_transaction_search', methods=['POST'])
-def dynamic_transaction_search():
-    token = get_jwt_token()
-    if not token:
-        return jsonify({"error": "Giriş yapılamadı, token alınamadı"}), 401
+        # Create an instance of the TransactionListClient with the given parameters
+        client = TransactionListClient(params)
+        # Execute the API request
+        response = client.execute()
 
-    # Kullanıcıdan dinamik filtreleme kriterlerini alıyoruz.
-    filters = request.json
-    headers = {
-        "Authorization": f"Bearer {token}"
-    }
-    url = "https://sandbox-reporting.rpdpymnt.com/api/v3/transaction/list"
-    response = requests.post(url, headers=headers, json={
-        "fromDate": filters.get("fromDate", "2024-01-01"),
-        "toDate": filters.get("toDate", "2024-01-31")
-    })
+        # Check if the response status code is 200 (OK)
+        if response.status_code == 200:
+            # Parse the JSON response data
+            transaction_data = response.json()
+            data = transaction_data.get('data', [])
 
-    if response.status_code == 200:
-        transaction_data = response.json().get("data", [])
-        # Filtreleme işlemi
-        for key, value in filters.items():
-            if key not in ["fromDate", "toDate"]:
-                transaction_data = [t for t in transaction_data if t.get("transaction", {}).get(key) == value]
-        return jsonify(transaction_data)
-    else:
-        return jsonify({"error": "Transaction listesi alınamadı"}), response.status_code
+            # Data Structures and Algorithms Implementation
+            # Filter transactions where the original amount is greater than 100 and status is 'APPROVED'
+            filtered_transactions = [
+                txn for txn in data
+                if txn.get('transaction', {}).get('merchant', {}).get('originalAmount', 0) > 100 and
+                   txn.get('transaction', {}).get('status') == 'APPROVED'
+            ]
+            # Sort the filtered transactions by original amount in descending order
+            sorted_transactions = sorted(
+                filtered_transactions,
+                key=lambda x: x.get('transaction', {}).get('merchant', {}).get('originalAmount', 0),
+                reverse=True
+            )
+            # Return the sorted transactions as a JSON response
+            return jsonify(sorted_transactions)
+        else:
+            # If the response is not successful, log and return an error message
+            error_message = f"Failed to fetch transaction list. Status Code: {response.status_code}, Response: {response.text}"
+            print(f"Error in transactions_list: {error_message}")
+            return jsonify({"error": error_message}), response.status_code
+    except Exception as e:
+        # Handle any exceptions that occur during the process
+        print(f"Exception in transactions_list: {e}")
+        return jsonify({"error": str(e)}), 500
 
-# Bu endpoint, daha dinamik ve esnek arama yapabilmeyi sağlıyor.
-# Kullanıcıdan gelen filtre parametrelerine göre transaction'ları filtreliyor ve sonuçları döndürüyor.
-# Kullanılan veri yapıları ve teknikler:
-# - Dict: Filtre kriterlerini saklamak ve API'den gelen veriler üzerinde arama yapmak için kullanıldı.
-# - List comprehension: Dinamik filtreleme işlemlerinde kullanıldı.
-# - for döngüsü: Kullanıcının belirttiği filtre kriterlerini işlemede kullanıldı.
+# Define the route for fetching details of a specific transaction
+@app.route('/transaction/<transaction_id>', methods=['GET'])
+def get_transaction(transaction_id):
+    try:
+        # Create an instance of the GetTransactionClient with the given transaction ID
+        client = GetTransactionClient(transaction_id)
+        # Execute the API request
+        response = client.execute()
 
+        # Parse the JSON response data
+        data = response.json()
+
+        # Check if the response is successful and the status is 'APPROVED'
+        if response.status_code == 200 and data.get('status') == 'APPROVED':
+            # Return the transaction data as a JSON response
+            return jsonify(data)
+        else:
+            # If not successful, log and return the error message from the API
+            error_message = data.get('message', 'Unknown error')
+            print(f"Error in get_transaction: {error_message}")
+            return jsonify({"error": error_message}), 400
+    except Exception as e:
+        # Handle any exceptions that occur during the process
+        print(f"Exception in get_transaction: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# Define the route for fetching client information associated with a transaction
+@app.route('/client/<transaction_id>', methods=['GET'])
+def get_client(transaction_id):
+    try:
+        # Create an instance of the GetClientInfoClient with the given transaction ID
+        client = GetClientInfoClient(transaction_id)
+        # Execute the API request
+        response = client.execute()
+
+        # Print the raw response text for debugging purposes
+        print(f"Raw response text: {response.text}")
+
+        # Attempt to parse the response as JSON
+        try:
+            # Try parsing the response text directly
+            data = json.loads(response.text)
+        except json.JSONDecodeError:
+            # If parsing fails, handle double-encoded JSON
+            response_text = response.text.strip('"').replace('\\"', '"')
+            data = json.loads(response_text)
+
+        # Check if the response is successful and contains 'customerInfo'
+        if response.status_code == 200 and data.get('customerInfo'):
+            # Return the client information as a JSON response
+            return jsonify(data)
+        else:
+            # If not successful, log and return the error message from the API
+            error_message = data.get('message', 'Unknown error')
+            print(f"Error in get_client: {error_message}")
+            return jsonify({"error": error_message}), 400
+    except Exception as e:
+        # Handle any exceptions that occur during the process
+        print(f"Exception in get_client: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# Run the Flask application when this script is executed directly
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
-
-# Devam ederken, eklediğimiz "dynamic_transaction_search" endpointi ile daha esnek bir arama ve filtreleme sistemi geliştirdik.
-# Bu tür esneklikler, gerçek dünyada kullanıcıların farklı ihtiyaçlarına cevap verebilmek için oldukça önemlidir.
-# Filtreleme işlemlerinde list comprehension ve dict veri yapısını kullanarak kodun hem okunabilirliğini hem de performansını artırdık.
-
-# Unit testler için pytest'i kullanacağız, fakat bu testleri production ortamına deploy etmeyeceğiz.
-# Bu yüzden testleri ayrı bir dosyada tutacağız.
-
-# test_app.py
-# import pytest
-# from app import app
-
-# @pytest.fixture
-def client():
-    with app.test_client() as client:
-        yield client
-
-# def test_home(client):
-#     response = client.get('/')
-#     assert response.status_code == 200
-#     assert b'Uygulama çalışıyor!' in response.data
-
-# def test_transactions_report(client):
-#     response = client.get('/transactions_report')
-#     assert response.status_code in [200, 401]
-
-# def test_transaction_list(client):
-#     response = client.get('/transaction_list')
-#     assert response.status_code in [200, 401]
-
-# def test_dynamic_transaction_search(client):
-#     response = client.post('/dynamic_transaction_search', json={"fromDate": "2024-01-01", "toDate": "2024-01-31"})
-#     assert response.status_code in [200, 401]
+    app.run(debug=True)
