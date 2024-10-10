@@ -5,15 +5,25 @@ from api_clients.transaction_list_client import TransactionListClient
 from api_clients.get_transaction_client import GetTransactionClient
 from api_clients.get_client_info_client import GetClientInfoClient
 import json
+# Import CORS if needed (uncomment if necessary)
+# from flask_cors import CORS
 
 # Initialize the Flask application
 app = Flask(__name__)
+# Initialize CORS if needed (uncomment if necessary)
+# CORS(app)
 
 # Define the home route
 @app.route('/')
 def home():
     # Render the index.html template
     return render_template('index.html')
+
+# Define the route for the transactions page (Ajax-based fluent approach)
+@app.route('/transactions')
+def transactions():
+    # Render the transactions.html template
+    return render_template('transactions.html')
 
 # Define the route for fetching transaction reports
 @app.route('/transactions/report', methods=['GET'])
@@ -41,13 +51,11 @@ def transactions_report():
             # Return the data as a JSON response
             return jsonify(data)
         else:
-            # If the response is not successful, log and return an error message
+            # If the response is not successful, return an error message
             error_message = f"Failed to fetch transaction report. Status Code: {response.status_code}, Response: {response.text}"
-            print(f"Error in transactions_report: {error_message}")
             return jsonify({"error": error_message}), response.status_code
     except Exception as e:
         # Handle any exceptions that occur during the process
-        print(f"Exception in transactions_report: {e}")
         return jsonify({"error": str(e)}), 500
 
 # Define the route for fetching a list of transactions
@@ -85,7 +93,6 @@ def transactions_list():
             # Parse the JSON response data
             transaction_data = response.json()
             data = transaction_data.get('data', [])
-
             # Data Structures and Algorithms Implementation
             # Filter transactions where the original amount is greater than 100 and status is 'APPROVED'
             filtered_transactions = [
@@ -102,13 +109,42 @@ def transactions_list():
             # Return the sorted transactions as a JSON response
             return jsonify(sorted_transactions)
         else:
-            # If the response is not successful, log and return an error message
+            # If the response is not successful, return an error message
             error_message = f"Failed to fetch transaction list. Status Code: {response.status_code}, Response: {response.text}"
-            print(f"Error in transactions_list: {error_message}")
             return jsonify({"error": error_message}), response.status_code
     except Exception as e:
         # Handle any exceptions that occur during the process
-        print(f"Exception in transactions_list: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# Define the route for handling Ajax requests for transaction queries
+@app.route('/transactions/list/ajax', methods=['GET'])
+def transactions_list_ajax():
+    try:
+        # Get parameters from the query string
+        params = request.args.to_dict()
+
+        # Ensure that at least one parameter is provided
+        if not params:
+            return jsonify({"error": "At least one parameter must be provided."}), 400
+
+        # Create an instance of the TransactionListClient with the given parameters
+        client = TransactionListClient(params)
+        # Execute the API request
+        response = client.execute()
+
+        # Check if the response status code is 200 (OK)
+        if response.status_code == 200:
+            # Parse the JSON response data
+            transaction_data = response.json()
+            data = transaction_data.get('data', [])
+            # Return the data as a JSON response
+            return jsonify(data)
+        else:
+            # If the response is not successful, return an error message
+            error_message = f"Failed to fetch transaction list. Status Code: {response.status_code}, Response: {response.text}"
+            return jsonify({"error": error_message}), response.status_code
+    except Exception as e:
+        # Handle any exceptions that occur during the process
         return jsonify({"error": str(e)}), 500
 
 # Define the route for fetching details of a specific transaction
@@ -128,13 +164,11 @@ def get_transaction(transaction_id):
             # Return the transaction data as a JSON response
             return jsonify(data)
         else:
-            # If not successful, log and return the error message from the API
+            # If not successful, return the error message from the API
             error_message = data.get('message', 'Unknown error')
-            print(f"Error in get_transaction: {error_message}")
             return jsonify({"error": error_message}), 400
     except Exception as e:
         # Handle any exceptions that occur during the process
-        print(f"Exception in get_transaction: {e}")
         return jsonify({"error": str(e)}), 500
 
 # Define the route for fetching client information associated with a transaction
@@ -163,13 +197,11 @@ def get_client(transaction_id):
             # Return the client information as a JSON response
             return jsonify(data)
         else:
-            # If not successful, log and return the error message from the API
+            # If not successful, return the error message from the API
             error_message = data.get('message', 'Unknown error')
-            print(f"Error in get_client: {error_message}")
             return jsonify({"error": error_message}), 400
     except Exception as e:
         # Handle any exceptions that occur during the process
-        print(f"Exception in get_client: {e}")
         return jsonify({"error": str(e)}), 500
 
 # Run the Flask application when this script is executed directly
